@@ -18,7 +18,16 @@
 <script>window.p5 || document.write('<script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.js">\x3C/script>')</script>
 
 <script>
-const mouseButtonsDown = { 0: false, 1: false, 2: false }
+let mouse_buttons_down = { 0: false, 1: false, 2: false }
+const pan = {
+    x: 0, y: 0,
+    xv: 0, yv: 0,
+    held: false,
+}
+
+function mod(x, n) {
+    return fract(x / n) * n
+}
 
 let canvas, glsl, cells
 let paused = false
@@ -46,7 +55,7 @@ function setup() {
     cells = init_cells()
 
     frameRate(60)
-    addEventListener("contextmenu", e => e.preventDefault())
+    document.addEventListener("contextmenu", e => e.preventDefault())
 }
 
 function mousePressed(e) {
@@ -54,32 +63,44 @@ function mousePressed(e) {
     if (e.detail > 1) {
         e.preventDefault()
     }
-    if (e.button in mouseButtonsDown) {
-        mouseButtonsDown[e.button] = true
+    if (e.button in mouse_buttons_down) {
+        mouse_buttons_down[e.button] = true
+    }
+
+    if (e.button == 2) {
+        pan.held = true
     }
 }
 
 function mouseReleased(e) {
-    if (e.button in mouseButtonsDown) {
-        mouseButtonsDown[e.button] = false
+    if (e.button in mouse_buttons_down) {
+        mouse_buttons_down[e.button] = false
+    }
+
+    if (e.button == 2) {
+        pan.held = false
     }
 }
 
 // better version of mouseIsPressed
 function mouseIsDown(button) {
     if (button === undefined) {
-        for (const b in mouseButtonsDown) {
-            if (mouseButtonsDown[b]) {
+        for (const b in mouse_buttons_down) {
+            if (mouse_buttons_down[b]) {
                 return true
             }
         }
         return false
     }
-    return button in mouseButtonsDown && mouseButtonsDown[button]
+    return button in mouse_buttons_down && mouse_buttons_down[button]
 }
 
+document.addEventListener("mouseleave", e => {
+    pan.held = false
+    mouse_buttons_down = { 0: false, 1: false, 2: false }
+})
+
 function keyPressed(e) {
-    console.log(e.key)
     if (key === " ") {
         paused = !paused
     } else if (key === "r") {
@@ -87,7 +108,7 @@ function keyPressed(e) {
     }
 }
 
-addEventListener("keydown", e => {
+document.addEventListener("keydown", e => {
     // includes held repeat
     if (e.key === "ArrowRight") {
         step();
@@ -144,16 +165,18 @@ function interact() {
     if (mouseIsDown(0)) {
         const aspect = windowWidth / windowHeight
         const ww = windowWidth, wh = windowHeight
+        const mx = mod(mouseX - pan.x, ww)
+        const my = mod(mouseY - pan.y, wh)
         let mxSquare, mySquare
         if (aspect > 1) {
-            mxSquare = (ww / 2 + (mouseX - ww / 2) * aspect) / ww
-            mySquare = 1 - mouseY / wh
+            mxSquare = (ww / 2 + (mx - ww / 2) * aspect) / ww
+            mySquare = 1 - my / wh
         } else {
-            mxSquare = mouseX / ww
-            mySquare = 1 - (wh / 2 + (mouseY - wh / 2) / aspect) / wh
+            mxSquare = mx / ww
+            mySquare = 1 - (wh / 2 + (my - wh / 2) / aspect) / wh
         }
 
-        let cur_cells = glsl({
+        const cur_cells = glsl({
             cells: cells[0],
             FP: "cells(I)",
         }, { ...cells_target_params(), story: 1, tag: "cur_cells" })
@@ -165,29 +188,60 @@ function interact() {
             FP: `
             vec2 size = vec2(cells_size());
             float aspect = size.x / size.y;
-            vec2 uvSquare = (
+            vec2 aspect_scale = (
                 aspect > 1.0
-                ? vec2(0.5 + (UV.x - 0.5) * aspect, UV.y)
-                : vec2(UV.x, 0.5 + (UV.y - 0.5) / aspect)
+                ? vec2(aspect, 1.0)
+                : vec2(1.0, 1.0 / aspect)
             );
-            if (distance(uvSquare, mouseSquare) < brushSize) {
-                FOut = vec4(hash(ivec3(I, seed)), 1);
-            } else {
-                FOut = cells(I);
+            vec2 uv_square = 0.5 + (UV - 0.5) * aspect_scale;
+            for (int i = -1; i <= 1; ++i) {
+                for (int j = -1; j <= 1; ++j) {
+                    vec2 uv_tile = uv_square + vec2(i, j) * aspect_scale;
+                    if (distance(uv_tile, mouseSquare) < brushSize) {
+                        FOut = vec4(hash(ivec3(I, seed)), 1);
+                        return;
+                    }
+                }
             }
+            FOut = cells(I);
         `}, cells[0])
     }
 }
 
-function draw() {
+function update() {
     if (!paused) {
         step()
     }
     interact()
+
+    // TODO: framerate independence, smoothing
+    if (pan.held) {
+        const dx = mouseX - pmouseX
+        const dy = mouseY - pmouseY
+        pan.xv = dx
+        pan.yv = dy
+        pan.x += dx
+        pan.y += dy
+    } else {
+        pan.xv *= 0.9
+        pan.yv *= 0.9
+        pan.x += pan.xv
+        pan.y += pan.yv
+    }
+}
+
+function draw() {
+    update()
     glsl({
+        offset: [round(-pan.x / pixels_per_cell), round(pan.y / pixels_per_cell)],
         cells: cells[0],
-        FP: "cells(UV)",
-    })
+        FP: `
+        void fragment() {
+            vec2 offset_uv = vec2(offset) / vec2(cells_size());
+            vec2 uv = mod(UV + offset_uv, vec2(1));
+            FOut = cells(uv);
+        }
+    `})
 }
 
 function windowResized() {
