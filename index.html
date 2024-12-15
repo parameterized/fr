@@ -31,6 +31,24 @@ const pan = {
 function mod(x, n) {
     return fract(x / n) * n
 }
+function clamp(x, a, b) {
+    return min(max(x, a), b)
+}
+
+const ease = {
+    inQuad(t) { return t * t },
+    outQuad(t) { return t * (2 - t) },
+    inOutQuad(t) { return t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t },
+    inCubic(t) { return t * t * t },
+    outCubic(t) { return (--t) * t * t + 1 },
+    inOutCubic(t) { return t < .5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1 },
+    inQuart(t) { return t * t * t * t },
+    outQuart(t) { return 1 - (--t) * t * t * t },
+    inOutQuart(t) { return t < .5 ? 8 * t * t * t * t : 1 - 8 * (--t) * t * t * t },
+    inQuint(t) { return t * t * t * t * t },
+    outQuint(t) { return 1 + (--t) * t * t * t * t },
+    inOutQuint(t) { return t < .5 ? 16 * t * t * t * t * t : 1 + 16 * (--t) * t * t * t * t }
+}
 
 let glsl, cells
 let paused = false
@@ -247,6 +265,10 @@ function update() {
     }
     pan.x = mod(pan.x, width)
     pan.y = mod(pan.y, height)
+
+    // panel animation
+    panel_open_t += panel_open ? 0.1 : -0.1
+    panel_open_t = clamp(panel_open_t, 0, 1)
 }
 
 function draw() {
@@ -299,6 +321,8 @@ const button_data = [
 const panel_height = 100
 const spacing = 20
 const padding = 10
+let panel_open = true
+let panel_open_t = 1
 function get_buttons(p) {
     let buttons_width = 0
     for (const b of button_data) {
@@ -315,15 +339,29 @@ function get_buttons(p) {
         const n_lines = b_text.split("\n").length
         const vspace = (p.textLeading() - p.textSize()) * (n_lines - 1)
         const b_height = p.textSize() * n_lines + vspace + padding * 2
+        const y_offset = (1 - ease.inOutCubic(panel_open_t)) * panel_height
         buttons.push({
             ...b,
             x: offset,
-            y: p.height - (panel_height + b_height) / 2,
+            y: p.height - (panel_height + b_height) / 2 + y_offset,
             w: b_width,
             h: b_height,
         })
         offset += b_width + spacing
     }
+
+    const b_width = p.textSize() + padding * 2
+    buttons.push({
+        text: () => panel_open ? "▼" : "▲",
+        action: () => {
+            panel_open = !panel_open
+        },
+        x: p.width - b_width - spacing,
+        y: p.height - panel_height / 2 - b_width / 2,
+        w: b_width,
+        h: b_width,
+    })
+
     return buttons
 }
 
@@ -343,7 +381,8 @@ function ui_sketch(p) {
         document.body.style.cursor = "default"
         p.clear()
         p.fill(0, 100)
-        p.rect(0, p.height - panel_height, p.width, panel_height)
+        const y_offset = (1 - ease.inOutCubic(panel_open_t)) * panel_height
+        p.rect(0, p.height - panel_height + y_offset, p.width, panel_height)
         p.fill(255, 200)
         if (paused) {
             p.text("paused", 70, p.height - 20)
