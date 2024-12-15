@@ -27,6 +27,10 @@ const pan = {
     xv: 0, yv: 0,
     held: false,
 }
+const zoom = {
+    scale: 1,
+    vel_factor: 1,
+}
 
 function mod(x, n) {
     return fract(x / n) * n
@@ -129,6 +133,14 @@ function mouseIsDown(button) {
     }
     return button in mouse_buttons_down && mouse_buttons_down[button]
 }
+
+function mouseWheel(e) {
+    if (e.deltaY === 0) return
+    zoom.vel_factor -= e.deltaY / 2000
+
+    e.preventDefault()
+}
+
 
 document.addEventListener("mouseleave", e => {
     pan.held = false
@@ -265,6 +277,23 @@ function update() {
         pan.x += pan.xv
         pan.y += pan.yv
     }
+
+    // zoom
+    const pscale = zoom.scale
+    zoom.scale *= zoom.vel_factor
+    zoom.scale = clamp(zoom.scale, 1, 10)
+    zoom.vel_factor = lerp(zoom.vel_factor, 1, 0.2)
+
+    // update pan to keep mouse in place
+    const mouse_uv = [mouseX / width, (1 - mouseY / height)]
+    const delta_uv = [
+        mouse_uv[0] * (1 / pscale - 1 / zoom.scale),
+        mouse_uv[1] * (1 / pscale - 1 / zoom.scale),
+    ]
+    pan.x -= width * delta_uv[0]
+    pan.y += height * delta_uv[1]
+
+    // keep pan in bounds for easier interaction
     pan.x = mod(pan.x, width)
     pan.y = mod(pan.y, height)
 
@@ -276,12 +305,16 @@ function update() {
 function draw() {
     update()
     glsl({
-        offset: [round(-pan.x / pixels_per_cell), round(pan.y / pixels_per_cell)],
+        offset: [
+            round(-pan.x / pixels_per_cell),
+            round(pan.y / pixels_per_cell),
+        ],
+        scale: zoom.scale,
         cells: cells[0],
         FP: `
         void fragment() {
             vec2 offset_uv = vec2(offset) / vec2(cells_size());
-            vec2 uv = mod(UV + offset_uv, vec2(1));
+            vec2 uv = mod(UV / scale + offset_uv, vec2(1));
             FOut = cells(uv);
         }
     `})
