@@ -36,7 +36,7 @@ function mod(x, n) {
     return fract(x / n) * n
 }
 function clamp(x, a, b) {
-    return min(max(x, a), b)
+    return max(min(x, b), a)
 }
 
 const ease = {
@@ -214,8 +214,8 @@ function interact() {
     if (mouseIsDown(0) && !ui_pressed) {
         const aspect = width / height
         const w = width, h = height
-        const mx = mod(mouseX - pan.x, w)
-        const my = mod(mouseY - pan.y, h)
+        const mx = mod(mouseX / zoom.scale - pan.x, w)
+        const my = mod(h - (h - mouseY) / zoom.scale - pan.y, h)
         let mxSquare, mySquare
         if (aspect > 1) {
             mxSquare = (w / 2 + (mx - w / 2) * aspect) / w
@@ -232,7 +232,7 @@ function interact() {
         glsl({
             seed: Math.random() * 12417,
             mouseSquare: [mxSquare, mySquare],
-            brushSize: 0.1,
+            brushSize: 0.1 / zoom.scale,
             cells: cur_cells[0],
             FP: `
             vec2 size = vec2(cells_size());
@@ -265,8 +265,8 @@ function update() {
 
     // TODO: framerate independence, smoothing
     if (pan.held) {
-        const dx = mouseX - pmouseX
-        const dy = mouseY - pmouseY
+        const dx = (mouseX - pmouseX) / zoom.scale
+        const dy = (mouseY - pmouseY) / zoom.scale
         pan.xv = dx
         pan.yv = dy
         pan.x += dx
@@ -281,7 +281,7 @@ function update() {
     // zoom
     const pscale = zoom.scale
     zoom.scale *= zoom.vel_factor
-    zoom.scale = clamp(zoom.scale, 1, 10)
+    zoom.scale = clamp(zoom.scale, 1, 40 / pixels_per_cell)
     zoom.vel_factor = lerp(zoom.vel_factor, 1, 0.2)
 
     // update pan to keep mouse in place
@@ -306,8 +306,8 @@ function draw() {
     update()
     glsl({
         offset: [
-            round(-pan.x / pixels_per_cell),
-            round(pan.y / pixels_per_cell),
+            -pan.x / pixels_per_cell,
+            pan.y / pixels_per_cell,
         ],
         scale: zoom.scale,
         cells: cells[0],
@@ -335,7 +335,7 @@ const button_data = [
     {
         text: () => "÷2",
         action: () => {
-            pixels_per_cell /= 2
+            pixels_per_cell = max(pixels_per_cell / 2, 1 / 4)
         },
     },
     {
