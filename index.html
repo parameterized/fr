@@ -1,0 +1,60 @@
+<title>👁️</title>
+<link rel=icon
+    href='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="1.1em" font-size="75">👁️</text></svg>'>
+<style>
+    html, body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+        background-color: #262626;
+    }
+    canvas { display: block; }
+</style>
+
+<!-- fallback to cdn -->
+<script src="lib/swissgl.js"></script>
+<script>window.SwissGL || document.write('<script src="https://cdn.jsdelivr.net/gh/google/swissgl@main/swissgl.js">\x3C/script>')</script>
+<script src="lib/p5.js"></script>
+<script>window.p5 || document.write('<script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.js">\x3C/script>')</script>
+
+<script>
+let glsl, cells
+
+let pixels_per_cell = 4
+const cellsTargetParams = {
+    scale: 1 / pixels_per_cell / window.devicePixelRatio,
+    format: "rgba32f",
+    story: 2,
+    tag: "cells",
+}
+
+function setup() {
+    let canvas = createCanvas(window.innerWidth, window.innerHeight, WEBGL)
+    glsl = SwissGL(canvas.elt)
+    cells = glsl({
+        seed: Math.random() * 12417,
+        FP: "hash(ivec3(I, seed)), 1"
+    }, { ...cellsTargetParams })
+
+    frameRate(60)
+    addEventListener("contextmenu", e => e.preventDefault())
+}
+
+function step() {
+    cells = glsl({
+        FP: "mod(Src(I).rgb + vec3(0.01), vec3(1)), 1"
+    }, { ...cellsTargetParams })
+}
+
+function draw() {
+    step()
+    glsl({
+        cells: cells[0],
+        FP: "cells(UV)"
+    })
+}
+
+function windowResized() {
+    resizeCanvas(window.innerWidth, window.innerHeight)
+}
+</script>
