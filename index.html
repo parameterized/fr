@@ -152,11 +152,16 @@ function interact() {
             mxSquare = mouseX / ww
             mySquare = 1 - (wh / 2 + (mouseY - wh / 2) / aspect) / wh
         }
+
+        let cur_cells = glsl({
+            cells: cells[0],
+            FP: "cells(I)",
+        }, { ...cells_target_params(), story: 1, tag: "cur_cells" })
         glsl({
             seed: Math.random() * 12417,
             mouseSquare: [mxSquare, mySquare],
             brushSize: 0.1,
-            cells: cells[1],
+            cells: cur_cells[0],
             FP: `
             vec2 size = vec2(cells_size());
             float aspect = size.x / size.y;
