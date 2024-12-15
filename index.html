@@ -8,7 +8,9 @@
         overflow: hidden;
         background-color: #262626;
     }
-    canvas { display: block; }
+    canvas {
+        position: absolute;
+    }
 </style>
 
 <!-- fallback to cdn -->
@@ -29,7 +31,7 @@ function mod(x, n) {
     return fract(x / n) * n
 }
 
-let canvas, glsl, cells
+let glsl, cells
 let paused = false
 
 let pixels_per_cell = 4
@@ -50,8 +52,8 @@ function init_cells() {
 }
 
 function setup() {
-    canvas = createCanvas(innerWidth, innerHeight, WEBGL)
-    glsl = SwissGL(canvas.elt)
+    createCanvas(windowWidth, windowHeight, WEBGL)
+    glsl = SwissGL(canvas)
     cells = init_cells()
 
     frameRate(60)
@@ -59,7 +61,7 @@ function setup() {
 }
 
 function mousePressed(e) {
-    if (e.target !== canvas.elt) { return }
+    if (e.target !== canvas) { return }
     if (e.detail > 1) {
         e.preventDefault()
     }
@@ -69,6 +71,17 @@ function mousePressed(e) {
 
     if (e.button == 2) {
         pan.held = true
+    } else if (e.button == 0) {
+        for (const b of get_buttons(ui_p)) {
+            if (b.text === undefined) {
+                continue
+            }
+            if (b.action && mouseX >= b.x && mouseX <= b.x + b.w
+                && mouseY >= b.y && mouseY <= b.y + b.h) {
+                b.action()
+                break
+            }
+        }
     }
 }
 
@@ -163,17 +176,17 @@ function step() {
 
 function interact() {
     if (mouseIsDown(0)) {
-        const aspect = windowWidth / windowHeight
-        const ww = windowWidth, wh = windowHeight
-        const mx = mod(mouseX - pan.x, ww)
-        const my = mod(mouseY - pan.y, wh)
+        const aspect = width / height
+        const w = width, h = height
+        const mx = mod(mouseX - pan.x, w)
+        const my = mod(mouseY - pan.y, h)
         let mxSquare, mySquare
         if (aspect > 1) {
-            mxSquare = (ww / 2 + (mx - ww / 2) * aspect) / ww
-            mySquare = 1 - my / wh
+            mxSquare = (w / 2 + (mx - w / 2) * aspect) / w
+            mySquare = 1 - my / h
         } else {
-            mxSquare = mx / ww
-            mySquare = 1 - (wh / 2 + (my - wh / 2) / aspect) / wh
+            mxSquare = mx / w
+            mySquare = 1 - (h / 2 + (my - h / 2) / aspect) / h
         }
 
         const cur_cells = glsl({
@@ -228,8 +241,8 @@ function update() {
         pan.x += pan.xv
         pan.y += pan.yv
     }
-    pan.x = mod(pan.x, windowWidth)
-    pan.y = mod(pan.y, windowHeight)
+    pan.x = mod(pan.x, width)
+    pan.y = mod(pan.y, height)
 }
 
 function draw() {
@@ -247,6 +260,111 @@ function draw() {
 }
 
 function windowResized() {
-    resizeCanvas(innerWidth, innerHeight)
+    resizeCanvas(windowWidth, windowHeight)
 }
+
+const button_data = [
+    {
+        text: () => "reset",
+        action: () => {
+            cells = init_cells()
+        },
+    },
+    {},
+    {
+        text: () => "÷2",
+        action: () => {
+            pixels_per_cell /= 2
+        },
+    },
+    {
+        text: () => `Cell Size:\n${pixels_per_cell}`,
+    },
+    {
+        text: () => "×2",
+        action: () => {
+            pixels_per_cell *= 2
+        },
+    },
+    {},
+    {
+        text: () => "step",
+        action: step,
+    },
+]
+const panel_height = 100
+const spacing = 20
+const padding = 10
+function get_buttons(p) {
+    let buttons_width = 0
+    for (const b of button_data) {
+        const b_text = b.text ? b.text() : ""
+        buttons_width += p.textWidth(b_text) + padding * 2
+    }
+    buttons_width += (button_data.length - 1) * spacing
+
+    const buttons = []
+    let offset = (p.width - buttons_width) / 2
+    for (const b of button_data) {
+        const b_text = b.text ? b.text() : ""
+        const b_width = p.textWidth(b_text) + padding * 2
+        const n_lines = b_text.split("\n").length
+        const vspace = (p.textLeading() - p.textSize()) * (n_lines - 1)
+        const b_height = p.textSize() * n_lines + vspace + padding * 2
+        buttons.push({
+            ...b,
+            x: offset,
+            y: p.height - (panel_height + b_height) / 2,
+            w: b_width,
+            h: b_height,
+        })
+        offset += b_width + spacing
+    }
+    return buttons
+}
+
+let ui_p
+function ui_sketch(p) {
+    ui_p = p
+    p.setup = function() {
+        p.createCanvas(p.windowWidth, p.windowHeight)
+        p.canvas.style.pointerEvents = "none"
+        p.frameRate(60)
+        p.background(0)
+        p.noStroke()
+        p.textFont("Courier New", 30)
+        p.textAlign(p.CENTER, p.CENTER)
+    }
+    p.draw = function() {
+        document.body.style.cursor = "default"
+        p.clear()
+        p.fill(0, 100)
+        p.rect(0, p.height - panel_height, p.width, panel_height)
+        p.fill(255, 200)
+        if (paused) {
+            p.text("paused", 70, p.height - 20)
+        }
+
+        for (const b of get_buttons(p)) {
+            if (b.text === undefined) {
+                continue
+            }
+            if (b.action && p.mouseX >= b.x && p.mouseX <= b.x + b.w
+                && p.mouseY >= b.y && p.mouseY <= b.y + b.h) {
+                p.fill(0, 200)
+                document.body.style.cursor = "pointer"
+            } else {
+                p.fill(0, 100)
+            }
+            p.rect(b.x, b.y, b.w, b.h, b.action ? 30 : 5)
+            p.fill(255, 200)
+            p.text(b.text(), b.x + b.w / 2, b.y + b.h / 2)
+        }
+    }
+    p.windowResized = function() {
+        p.resizeCanvas(p.windowWidth, p.windowHeight)
+    }
+}
+new p5(ui_sketch)
+
 </script>
