@@ -18,43 +18,136 @@
 <script>window.p5 || document.write('<script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.js">\x3C/script>')</script>
 
 <script>
-let glsl, cells
+const mouseButtonsDown = { 0: false, 1: false, 2: false }
+
+let canvas, glsl, cells
+let paused = false
 
 let pixels_per_cell = 4
-const cellsTargetParams = {
-    scale: 1 / pixels_per_cell / window.devicePixelRatio,
-    format: "rgba32f",
-    story: 2,
-    tag: "cells",
+function cells_target_params() {
+    return {
+        scale: 1 / pixels_per_cell / window.devicePixelRatio,
+        format: "rgba32f",
+        story: 2,
+        tag: "cells",
+    }
 }
 
 function setup() {
-    let canvas = createCanvas(window.innerWidth, window.innerHeight, WEBGL)
+    canvas = createCanvas(innerWidth, innerHeight, WEBGL)
     glsl = SwissGL(canvas.elt)
     cells = glsl({
         seed: Math.random() * 12417,
-        FP: "hash(ivec3(I, seed)), 1"
-    }, { ...cellsTargetParams })
+        FP: "hash(ivec3(I, seed)), 1",
+    }, { ...cells_target_params() })
 
     frameRate(60)
     addEventListener("contextmenu", e => e.preventDefault())
 }
 
+function mousePressed(e) {
+    if (e.target !== canvas.elt) { return }
+    if (e.detail > 1) {
+        e.preventDefault()
+    }
+    if (e.button in mouseButtonsDown) {
+        mouseButtonsDown[e.button] = true
+    }
+}
+
+function mouseReleased(e) {
+    if (e.button in mouseButtonsDown) {
+        mouseButtonsDown[e.button] = false
+    }
+}
+
+// better version of mouseIsPressed
+function mouseIsDown(button) {
+    if (button === undefined) {
+        for (const b in mouseButtonsDown) {
+            if (mouseButtonsDown[b]) {
+                return true
+            }
+        }
+        return false
+    }
+    return button in mouseButtonsDown && mouseButtonsDown[button]
+}
+
+function keyPressed() {
+    if (key == " ") {
+        paused = !paused
+    }
+}
+
 function step() {
+    if (paused) { return }
     cells = glsl({
-        FP: "mod(Src(I).rgb + vec3(0.01), vec3(1)), 1"
-    }, { ...cellsTargetParams })
+        seed: Math.random() * 12417,
+        FP: `
+        void fragment() {
+            FOut = Src(I);
+            vec3 rng = hash(ivec3(I, seed));
+            if (FOut.a == 0.0) {
+                FOut = vec4(rng, 1);
+                return;
+            }
+
+            ivec2 ac_offset = ivec2(round(rng.xy * 2.0 - 1.0));
+            ivec2 active_cell = (I + ac_offset + Src_size()) % Src_size();
+            FOut = vec4(
+                mod(Src(active_cell).rgb + rng * 0.01, vec3(1)),
+                1
+            );
+        }
+        `,
+    }, { ...cells_target_params() })
+}
+
+function interact() {
+    if (mouseIsDown(0)) {
+        const aspect = windowWidth / windowHeight
+        const ww = windowWidth, wh = windowHeight
+        let mxSquare, mySquare
+        if (aspect > 1) {
+            mxSquare = (ww / 2 + (mouseX - ww / 2) * aspect) / ww
+            mySquare = 1 - mouseY / wh
+        } else {
+            mxSquare = mouseX / ww
+            mySquare = 1 - (wh / 2 + (mouseY - wh / 2) / aspect) / wh
+        }
+        glsl({
+            seed: Math.random() * 12417,
+            mouseSquare: [mxSquare, mySquare],
+            brushSize: 0.1,
+            cells: cells[1],
+            FP: `
+            vec2 size = vec2(cells_size());
+            float aspect = size.x / size.y;
+            vec2 uvSquare = (
+                aspect > 1.0
+                ? vec2(0.5 + (UV.x - 0.5) * aspect, UV.y)
+                : vec2(UV.x, 0.5 + (UV.y - 0.5) / aspect)
+            );
+            if (distance(uvSquare, mouseSquare) < brushSize) {
+                FOut = vec4(hash(ivec3(I, seed)), 1);
+            } else {
+                FOut = cells(I);
+            }
+        `}, cells[0])
+    }
 }
 
 function draw() {
     step()
+    interact()
     glsl({
         cells: cells[0],
-        FP: "cells(UV)"
+        FP: "cells(UV)",
     })
 }
 
 function windowResized() {
-    resizeCanvas(window.innerWidth, window.innerHeight)
+    resizeCanvas(innerWidth, innerHeight)
 }
 </script>
