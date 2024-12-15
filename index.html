@@ -228,6 +228,8 @@ function update() {
         pan.x += pan.xv
         pan.y += pan.yv
     }
+    pan.x = mod(pan.x, windowWidth)
+    pan.y = mod(pan.y, windowHeight)
 }
 
 function draw() {
