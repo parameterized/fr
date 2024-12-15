@@ -21,6 +21,7 @@
 
 <script>
 let mouse_buttons_down = { 0: false, 1: false, 2: false }
+let ui_pressed = false
 const pan = {
     x: 0, y: 0,
     xv: 0, yv: 0,
@@ -69,19 +70,20 @@ function mousePressed(e) {
         mouse_buttons_down[e.button] = true
     }
 
-    if (e.button == 2) {
-        pan.held = true
-    } else if (e.button == 0) {
+    if (e.button == 0) {
         for (const b of get_buttons(ui_p)) {
             if (b.text === undefined) {
                 continue
             }
             if (b.action && mouseX >= b.x && mouseX <= b.x + b.w
                 && mouseY >= b.y && mouseY <= b.y + b.h) {
+                ui_pressed = true
                 b.action()
                 break
             }
         }
+    } else if (e.button == 2) {
+        pan.held = true
     }
 }
 
@@ -90,7 +92,9 @@ function mouseReleased(e) {
         mouse_buttons_down[e.button] = false
     }
 
-    if (e.button == 2) {
+    if (e.button == 0) {
+        ui_pressed = false
+    } else if (e.button == 2) {
         pan.held = false
     }
 }
@@ -175,7 +179,7 @@ function step() {
 }
 
 function interact() {
-    if (mouseIsDown(0)) {
+    if (mouseIsDown(0) && !ui_pressed) {
         const aspect = width / height
         const w = width, h = height
         const mx = mod(mouseX - pan.x, w)
@@ -332,7 +336,7 @@ function ui_sketch(p) {
         p.frameRate(60)
         p.background(0)
         p.noStroke()
-        p.textFont("Courier New", 30)
+        p.textFont("Courier New", 28)
         p.textAlign(p.CENTER, p.CENTER)
     }
     p.draw = function() {
