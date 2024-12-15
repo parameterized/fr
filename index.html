@@ -85,20 +85,43 @@ function step() {
     cells = glsl({
         seed: Math.random() * 12417,
         FP: `
+        float sigmoid(float x) {
+            return 1.0 / (1.0 + exp(-x));
+        }
+
         void fragment() {
+            // re-init on resize
             FOut = Src(I);
-            vec3 rng = hash(ivec3(I, seed));
+            vec3 rng_0 = hash(ivec3(I, seed));
             if (FOut.a == 0.0) {
-                FOut = vec4(rng, 1);
+                FOut = vec4(rng_0, 1);
                 return;
             }
 
-            ivec2 ac_offset = ivec2(round(rng.xy * 2.0 - 1.0));
-            ivec2 active_cell = (I + ac_offset + Src_size()) % Src_size();
-            FOut = vec4(
-                mod(Src(active_cell).rgb + rng * 0.01, vec3(1)),
-                1
-            );
+            // get random updater, get states
+            vec3 rng_1 = hash(ivec3(I, seed + 1.0));
+            ivec2 updater_offset = ivec2(round(rng_1.xy * 2.0 - 1.0));
+            ivec2 updater_pos = (I + updater_offset + Src_size()) % Src_size();
+            vec3 updater_state = Src(updater_pos).rgb;
+            vec3 self_state = FOut.rgb;
+
+            // mix based on relative distance from grey
+            float updater_grey = dot(updater_state, vec3(1.0 / 3.0));
+            float self_grey = dot(self_state, vec3(1.0 / 3.0));
+            float updater_dist = length(updater_state - updater_grey);
+            float self_dist = length(self_state - self_grey);
+            float updater_rel_dist = updater_dist / (updater_dist + self_dist);
+            float win_strength = 20.0;
+            float updater_strength = sigmoid((updater_rel_dist - 0.5) * win_strength);
+            vec3 new_state = mix(self_state, updater_state, updater_strength);
+
+            // add noise
+            vec3 rng_2 = hash(ivec3(I, seed + 2.0));
+            float temperature = 0.01;
+            new_state += (rng_2 * 2.0 - 1.0) * temperature;
+
+            new_state = clamp(new_state, 0.0, 1.0);
+            FOut = vec4(new_state, 1);
         }
         `,
     }, { ...cells_target_params() })
