@@ -33,13 +33,17 @@ function cells_target_params() {
     }
 }
 
-function setup() {
-    canvas = createCanvas(innerWidth, innerHeight, WEBGL)
-    glsl = SwissGL(canvas.elt)
-    cells = glsl({
+function init_cells() {
+    return glsl({
         seed: Math.random() * 12417,
         FP: "hash(ivec3(I, seed)), 1",
     }, { ...cells_target_params() })
+}
+
+function setup() {
+    canvas = createCanvas(innerWidth, innerHeight, WEBGL)
+    glsl = SwissGL(canvas.elt)
+    cells = init_cells()
 
     frameRate(60)
     addEventListener("contextmenu", e => e.preventDefault())
@@ -74,14 +78,23 @@ function mouseIsDown(button) {
     return button in mouseButtonsDown && mouseButtonsDown[button]
 }
 
-function keyPressed() {
-    if (key == " ") {
+function keyPressed(e) {
+    console.log(e.key)
+    if (key === " ") {
         paused = !paused
+    } else if (key === "r") {
+        cells = init_cells()
     }
 }
 
+addEventListener("keydown", e => {
+    // includes held repeat
+    if (e.key === "ArrowRight") {
+        step();
+    }
+})
+
 function step() {
-    if (paused) { return }
     cells = glsl({
         seed: Math.random() * 12417,
         FP: `
@@ -162,7 +175,9 @@ function interact() {
 }
 
 function draw() {
-    step()
+    if (!paused) {
+        step()
+    }
     interact()
     glsl({
         cells: cells[0],
