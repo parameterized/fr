@@ -43,12 +43,13 @@ const ease = {
 }
 
 class Updater {
-    constructor({get_target_params, init, update, draw}) {
-        Object.assign(this, {get_target_params, init, update, draw})
+    constructor({name, get_target_params, init, update, draw}) {
+        Object.assign(this, {name, get_target_params, init, update, draw})
     }
 }
 
 const huemap = new Updater({
+    name: "huemap",
     get_target_params: function() {
         return {
             scale: 1 / cell_size / window.devicePixelRatio,
@@ -132,6 +133,7 @@ const huemap = new Updater({
 })
 const r8_cycle = new Updater({
     ...huemap,
+    name: "r8 cycle",
     get_target_params: function() {
         return {
             scale: 1 / cell_size / window.devicePixelRatio,
@@ -406,7 +408,7 @@ const button_data = [
         action: () => get_updater().update(),
     },
     {
-        text: () => "cycle rule",
+        text: () => `cycle rule:\n${get_updater().name}`,
         action: cycle_updater,
     },
 ]
