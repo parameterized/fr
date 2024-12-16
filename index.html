@@ -61,7 +61,7 @@ const huemap = new Updater({
     init: function() {
         return glsl({
             seed: Math.random() * 12417,
-            FP: "hash(ivec3(I, seed)), 1",
+            FP: "hash(ivec3(I, seed)) * 255.0, 1",
         }, { ...this.get_target_params() })
     },
     update: function() {
@@ -122,11 +122,14 @@ const huemap = new Updater({
             ],
             scale: zoom.scale,
             cells: cells[0],
+            num_texture,
             FP: `
             void fragment() {
                 vec2 offset_uv = vec2(offset) / vec2(cells_size());
                 vec2 uv = mod(UV / scale + offset_uv, vec2(1));
                 FOut = cells(uv);
+
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(UV).r);
             }
         `})
     },
@@ -149,8 +152,74 @@ const r8_cycle = new Updater({
         }, { ...this.get_target_params(), format: "r8" })
     },
 })
+const adder = new Updater({
+    ...huemap,
+    name: "adder",
+    get_target_params: function() {
+        return {
+            scale: 1 / cell_size / window.devicePixelRatio,
+            format: "r32i",
+            story: 2,
+            tag: "cells",
+        }
+    },
+    update: function() {
+        cells = glsl({
+            seed: Math.random() * 12417,
+            cells: cells[0],
+            FP: `
+            uniform isampler2D cells;
+            void fragment() {
+                // re-init on resize
+                // FOut = Src(I);
+
+                ivec4 src = texture(cells, UV);
+                // src.r += 1;
+                src.r = (src.r + 1) % 256;
+                FOut = src;
+
+                // FOut = texture(cells, I);
+
+                // vec3 rng_0 = hash(ivec3(I, seed));
+                // if (FOut.a == 0.0 || isnan(FOut.r)) {
+                //     FOut = vec4(rng_0, 1);
+                //     return;
+                // }
+
+                // todo: something
+            }
+        `}, { ...this.get_target_params() })
+    },
+    draw: function() {
+        glsl({
+            offset: [
+                -pan.x / cell_size,
+                pan.y / cell_size,
+            ],
+            scale: zoom.scale,
+            cells: cells[0],
+            num_texture,
+            FP: `
+            // precision highp isampler2D;
+            uniform isampler2D cells;
+            void fragment() {
+                ivec4 f = texture(cells, UV);
+                FOut = vec4(f) / 255.0;
+
+                // vec2 offset_uv = vec2(offset) / vec2(cells_size());
+                // vec2 uv = mod(UV / scale + offset_uv, vec2(1));
+                // FOut = cells(uv);
+
+                // FOut = vec4(1);
+                // ivec4 f = texture(cells, UV);
+                // if (f.r < 128) { FOut.rgb = vec3(0); }
+            }
+        `})
+    },
+})
 
 const updaters = [
+    adder,
     huemap,
     r8_cycle,
 ]
@@ -180,6 +249,7 @@ let paused = false
 let cell_size = 4
 
 let glsl, cells
+let num_graphics, num_texture
 
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL)
@@ -188,6 +258,23 @@ function setup() {
 
     frameRate(60)
     document.addEventListener("contextmenu", e => e.preventDefault())
+
+    num_graphics = createGraphics(360, 44)
+    const g = num_graphics
+    g.scale(1, -1)
+    g.translate(0, -44)
+    g.clear()
+    g.noStroke()
+    g.fill(255)
+    g.textAlign(g.LEFT, g.CENTER)
+    g.textFont("Courier New", 60)
+    g.text("0123456789", 0, 26)
+    g.loadPixels()
+    num_texture = new TextureTarget(glsl.gl, {
+        size: [g.width, g.height],
+        format: "rgba8",
+        data: g.pixels,
+    })
 }
 
 function mousePressed(e) {
@@ -520,6 +607,8 @@ function ui_sketch(p) {
                 p.pop()
             }
         }
+
+        p.image(num_graphics, 0, 0)
     }
     p.windowResized = function() {
         p.resizeCanvas(p.windowWidth, p.windowHeight)
