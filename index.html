@@ -447,7 +447,7 @@ function get_buttons(p) {
 
     const b_width = p.textSize() + padding * 2
     buttons.push({
-        text: () => panel_open ? "▼" : "▲",
+        text: () => " ",
         action: () => {
             panel_open = !panel_open
         },
@@ -455,6 +455,7 @@ function get_buttons(p) {
         y: p.height - panel_height / 2 - b_width / 2,
         w: b_width,
         h: b_width,
+        is_panel_toggle: true,
     })
 
     return buttons
@@ -497,6 +498,27 @@ function ui_sketch(p) {
             p.rect(b.x, b.y, b.w, b.h, b.action ? 30 : 5)
             p.fill(255, 200)
             p.text(b.text(), b.x + b.w / 2, b.y + b.h / 2)
+
+            if (b.is_panel_toggle) {
+                p.push()
+                const ease_t = ease.inOutCubic(panel_open_t)
+                p.translate(
+                    b.x + b.w / 2,
+                    b.y + b.h / 2 + lerp(-2, 1, ease_t),
+                )
+                const pts = [
+                    [0, -8],
+                    [8, lerp(8, -8, ease_t)],
+                    [0, 8],
+                    [-8, lerp(8, -8, ease_t)],
+                ]
+                p.beginShape()
+                for (const [x, y] of pts) {
+                    p.vertex(x, y)
+                }
+                p.endShape(CLOSE)
+                p.pop()
+            }
         }
     }
     p.windowResized = function() {
