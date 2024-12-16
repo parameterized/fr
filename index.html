@@ -200,19 +200,19 @@ const adder = new Updater({
             cells: cells[0],
             num_texture,
             FP: `
-            // precision highp isampler2D;
             uniform isampler2D cells;
             void fragment() {
-                ivec4 f = texture(cells, UV);
+
+                ivec2 cells_size = textureSize(cells, 0);
+                vec2 offset_uv = vec2(offset) / vec2(cells_size);
+                vec2 uv = mod(UV / scale + offset_uv, vec2(1));
+
+                ivec4 f = texture(cells, uv);
                 FOut = vec4(f) / 255.0;
 
-                // vec2 offset_uv = vec2(offset) / vec2(cells_size());
-                // vec2 uv = mod(UV / scale + offset_uv, vec2(1));
-                // FOut = cells(uv);
-
-                // FOut = vec4(1);
-                // ivec4 f = texture(cells, UV);
-                // if (f.r < 128) { FOut.rgb = vec3(0); }
+                vec2 num_uv = uv * vec2(cells_size);
+                num_uv /= vec2(10, 1);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).r * scale / 10.0);
             }
         `})
     },
@@ -607,8 +607,6 @@ function ui_sketch(p) {
                 p.pop()
             }
         }
-
-        p.image(num_graphics, 0, 0)
     }
     p.windowResized = function() {
         p.resizeCanvas(p.windowWidth, p.windowHeight)
