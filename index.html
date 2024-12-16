@@ -144,7 +144,6 @@ function mouseWheel(e) {
 
 document.addEventListener("mouseleave", e => {
     pan.held = false
-    mouse_buttons_down = { 0: false, 1: false, 2: false }
 })
 
 function keyPressed(e) {
@@ -180,7 +179,7 @@ const update_rules = [
                 // re-init on resize
                 FOut = Src(I);
                 vec3 rng_0 = hash(ivec3(I, seed));
-                if (FOut.a == 0.0) {
+                if (FOut.a == 0.0 || isnan(FOut.r)) {
                     FOut = vec4(rng_0, 1);
                     return;
                 }
