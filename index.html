@@ -61,7 +61,7 @@ const huemap = new Updater({
     init: function() {
         return glsl({
             seed: Math.random() * 12417,
-            FP: "hash(ivec3(I, seed)) * 255.0, 1",
+            FP: "hash(ivec3(I, seed)), 1",
         }, { ...this.get_target_params() })
     },
     update: function() {
@@ -122,14 +122,11 @@ const huemap = new Updater({
             ],
             scale: zoom.scale,
             cells: cells[0],
-            num_texture,
             FP: `
             void fragment() {
                 vec2 offset_uv = vec2(offset) / vec2(cells_size());
                 vec2 uv = mod(UV / scale + offset_uv, vec2(1));
                 FOut = cells(uv);
-
-                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(UV).r);
             }
         `})
     },
@@ -195,8 +192,14 @@ const adder = new Updater({
             scale: 1 / cell_size / window.devicePixelRatio,
             format: "r32i",
             story: 2,
-            tag: "cells",
+            tag: "cells_int",
         }
+    },
+    init: function() {
+        return glsl({
+            seed: Math.random() * 12417,
+            FP: "hash(ivec3(I, seed)) * 255.0, 1",
+        }, { ...this.get_target_params() })
     },
     update: function() {
         cells = glsl({
@@ -269,7 +272,7 @@ const adder = new Updater({
         `}, {
             ...this.get_target_params(),
             story: 1,
-            tag: "cur_cells",
+            tag: "cur_cells_int",
         })
         glsl({
             seed: Math.random() * 12417,
