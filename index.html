@@ -26,6 +26,13 @@ function mod(x, n) {
 function clamp(x, a, b) {
     return max(min(x, b), a)
 }
+function sign(x) {
+    return x < 0 ? -1 : x > 0 ? 1 : 0
+}
+function mouse_in_rect({x, y, w, h}) {
+    return mouseX >= x && mouseX <= x + w
+        && mouseY >= y && mouseY <= y + h
+}
 
 const ease = {
     inQuad(t) { return t * t },
@@ -316,8 +323,10 @@ function get_updater() {
     return updaters[updater_index]
 }
 
-function cycle_updater() {
-    updater_index = (updater_index + 1) % updaters.length
+let last_cycle_time;
+function cycle_updater(dir = 1) {
+    updater_index = mod(updater_index + dir, updaters.length)
+    last_cycle_time = millis()
 }
 
 
@@ -374,12 +383,11 @@ function mousePressed(e) {
     }
 
     if (e.button == 0) {
-        for (const b of get_buttons(ui_p)) {
+        for (const b of get_buttons()) {
             if (b.text === undefined) {
                 continue
             }
-            if (b.action && mouseX >= b.x && mouseX <= b.x + b.w
-                && mouseY >= b.y && mouseY <= b.y + b.h) {
+            if (b.action && mouse_in_rect(b)) {
                 ui_pressed = true
                 b.action()
                 break
@@ -416,8 +424,16 @@ function mouseIsDown(button) {
 }
 
 function mouseWheel(e) {
-    if (e.deltaY === 0) return
-    zoom.vel_factor -= e.deltaY / 2000
+    const buttons = get_buttons()
+    const cycle_button = buttons.find(b => (b.text && b.text() || "").startsWith("cycle"))
+    if (mouse_in_rect(cycle_button)) {
+        if (millis() - (last_cycle_time || 0) > 100) {
+            cycle_updater(sign(-e.deltaY))
+            last_cycle_time = millis()
+        }
+    } else {
+        zoom.vel_factor -= e.deltaY / 2000
+    }
 
     e.preventDefault()
 }
@@ -434,8 +450,10 @@ function keyPressed(e) {
         cells = get_updater().init()
     } else if (key === "Tab") {
         panel_open = !panel_open
-    } else if (key === "n") {
+    } else if (key === "d") {
         cycle_updater()
+    } else if (key === "a") {
+        cycle_updater(-1)
     }
 }
 
@@ -521,7 +539,7 @@ function windowResized() {
 
 const button_data = [
     {
-        text: () => paused ? "play" : "pause",
+        text: () => paused ? "play " : "pause",
         action: () => paused = !paused,
     },
     {
@@ -564,7 +582,7 @@ const padding = 10
 let panel_open = true
 let panel_open_t = 1
 
-function get_buttons(p) {
+function get_buttons(p = ui_p) {
     let buttons_width = 0
     for (const b of button_data) {
         const b_text = b.text ? b.text() : ""
