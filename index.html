@@ -314,11 +314,156 @@ const add_max = new Updater({
         `}, glsl.buffers.cells_int[0])
     }
 })
+const uhh = new Updater({
+    ...add_max,
+    name: "uhh",
+    update: function() {
+        glsl({
+            seed: Math.random() * 12417,
+            cells: glsl.buffers.cells_int[0],
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                // todo: get macros to work for int textures
+                ivec2 cells_size = textureSize(cells, 0);
+                FOut = texelFetch(cells, I, 0);
+
+                // get random updater, get states
+                vec3 rng_1 = hash(ivec3(I, seed + 1.0));
+                ivec2 updater_offset = ivec2(round(rng_1.xy * 2.0 - 1.0));
+                ivec2 updater_pos = (I + updater_offset + cells_size) % cells_size;
+                if (updater_pos == I) {
+                    return;
+                }
+                int updater_state = texelFetch(cells, updater_pos, 0).r;
+                int self_state = FOut.r;
+
+                // add max
+                FOut.r = max(updater_state + 3, self_state + 3) % 256;
+            }
+        `}, { ...this.get_target_params() })
+    },
+    draw: function() {
+        glsl({
+            offset: [
+                -pan.x / cell_size,
+                pan.y / cell_size,
+            ],
+            scale: zoom.scale,
+            max_scale: zoom.max_scale,
+            cells: glsl.buffers.cells_int[0],
+            num_texture,
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                vec2 offset_uv = vec2(offset) / vec2(cells_size);
+                vec2 uv = mod(UV / scale + offset_uv, vec2(1));
+
+                ivec4 f = texture(cells, uv);
+                FOut = vec4(vec3(0), 1);
+                FOut.b = float(f.r) / 512.0;
+                FOut.r = float(f.r % 3 + 2) / 16.0;
+                FOut.g = float(f.r % 3 + 1) / 8.0;
+
+                // numbers
+                vec2 num_uv = uv * vec2(cells_size);
+                num_uv = mod(num_uv, vec2(1));
+                num_uv *= 4.0;
+                num_uv -= 0.5;
+                num_uv = clamp(num_uv, vec2(0, 1), vec2(3, 2));
+                int display_num = (f.r / int(pow(10.0, 2.0 - floor(num_uv.x))) % 10);
+                num_uv.x = mod(num_uv.x, 1.0);
+                num_uv.x += float(display_num);
+                num_uv /= vec2(10, 1);
+                float num_visibility = smoothstep(max_scale / 8.0, max_scale, scale);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * num_visibility);
+            }
+        `})
+    },
+})
+const uhh2 = new Updater({
+    ...add_max,
+    name: "uhh2",
+    update: function() {
+        glsl({
+            seed: Math.random() * 12417,
+            cells: glsl.buffers.cells_int[0],
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                // todo: get macros to work for int textures
+                ivec2 cells_size = textureSize(cells, 0);
+                FOut = texelFetch(cells, I, 0);
+
+                // get random updater, get states
+                vec3 rng_1 = hash(ivec3(I, seed + 1.0));
+                ivec2 updater_offset = ivec2(round(rng_1.xy * 2.0 - 1.0));
+                ivec2 updater_pos = (I + updater_offset + cells_size) % cells_size;
+                if (updater_pos == I) {
+                    return;
+                }
+                int updater_state = texelFetch(cells, updater_pos, 0).r;
+                int self_state = FOut.r;
+
+                // add max
+                if ((updater_state + self_state) % 3 == 0) {
+                    // FOut.r = max(updater_state + 1, self_state + int(rng_1.z * 3.0)) % 256;
+                    FOut.r = max(updater_state + 6, self_state + 6) % 128;
+                }
+            }
+        `}, { ...this.get_target_params() })
+    },
+    draw: function() {
+        glsl({
+            offset: [
+                -pan.x / cell_size,
+                pan.y / cell_size,
+            ],
+            scale: zoom.scale,
+            max_scale: zoom.max_scale,
+            cells: glsl.buffers.cells_int[0],
+            num_texture,
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                vec2 offset_uv = vec2(offset) / vec2(cells_size);
+                vec2 uv = mod(UV / scale + offset_uv, vec2(1));
+
+                ivec4 f = texture(cells, uv);
+                FOut = vec4(vec3(0), 1);
+                FOut.b = float(f.r) / 512.0;
+                FOut.r = float(f.r % 2 + 2) / 16.0;
+                FOut.g = float(f.r % 3 + 1) / 8.0;
+
+                // numbers
+                vec2 num_uv = uv * vec2(cells_size);
+                num_uv = mod(num_uv, vec2(1));
+                num_uv *= 4.0;
+                num_uv -= 0.5;
+                num_uv = clamp(num_uv, vec2(0, 1), vec2(3, 2));
+                int display_num = (f.r / int(pow(10.0, 2.0 - floor(num_uv.x))) % 10);
+                num_uv.x = mod(num_uv.x, 1.0);
+                num_uv.x += float(display_num);
+                num_uv /= vec2(10, 1);
+                float num_visibility = smoothstep(max_scale / 8.0, max_scale, scale);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * num_visibility);
+            }
+        `})
+    },
+})
 
 const updaters = [
-    add_max,
     huemap,
     r8_cycle,
+    add_max,
+    uhh,
+    uhh2,
 ]
 let updater_index = 0
 
@@ -354,7 +499,9 @@ let num_graphics, num_texture
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL)
     glsl = SwissGL(canvas)
-    get_updater().init()
+    for (const up of updaters) {
+        up.init()
+    }
 
     frameRate(60)
     document.addEventListener("contextmenu", e => e.preventDefault())
