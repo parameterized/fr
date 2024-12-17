@@ -189,9 +189,9 @@ const r8_cycle = new Updater({
         }, { ...this.get_target_params(), format: "r8" })
     },
 })
-const adder = new Updater({
+const add_max = new Updater({
     ...huemap,
-    name: "adder",
+    name: "add max",
     get_target_params: function() {
         return {
             scale: 1 / cell_size / window.devicePixelRatio,
@@ -214,17 +214,22 @@ const adder = new Updater({
             uniform isampler2D cells;
 
             void fragment() {
-                // TODO: get macros to work for int textures
-
-                // re-init on resize
+                // todo: get macros to work for int textures
+                ivec2 cells_size = textureSize(cells, 0);
                 FOut = texelFetch(cells, I, 0);
-                vec3 rng_0 = hash(ivec3(I, seed));
-                if (FOut.a == 0) {
-                    FOut = ivec4(rng_0 * 255.0, 1);
+
+                // get random updater, get states
+                vec3 rng_1 = hash(ivec3(I, seed + 1.0));
+                ivec2 updater_offset = ivec2(round(rng_1.xy * 2.0 - 1.0));
+                ivec2 updater_pos = (I + updater_offset + cells_size) % cells_size;
+                if (updater_pos == I) {
                     return;
                 }
+                int updater_state = texelFetch(cells, updater_pos, 0).r;
+                int self_state = FOut.r;
 
-                FOut.r = (FOut.r + 1) % 256;
+                // add max
+                FOut.r = max(updater_state + 2, self_state + 2) % 256;
             }
         `}, { ...this.get_target_params() })
     },
@@ -235,6 +240,7 @@ const adder = new Updater({
                 pan.y / cell_size,
             ],
             scale: zoom.scale,
+            max_scale: zoom.max_scale,
             cells: glsl.buffers.cells_int[0],
             num_texture,
             FP: `
@@ -258,7 +264,8 @@ const adder = new Updater({
                 num_uv.x = mod(num_uv.x, 1.0);
                 num_uv.x += float(display_num);
                 num_uv /= vec2(10, 1);
-                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * min(scale / 16.0, 1.0));
+                float num_visibility = smoothstep(max_scale / 8.0, max_scale, scale);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * num_visibility);
             }
         `})
     },
@@ -309,7 +316,7 @@ const adder = new Updater({
 })
 
 const updaters = [
-    adder,
+    add_max,
     huemap,
     r8_cycle,
 ]
@@ -335,6 +342,7 @@ const pan = {
 }
 const zoom = {
     scale: 1,
+    max_scale: 20,
     vel_factor: 1,
 }
 let paused = false
@@ -485,7 +493,7 @@ function update() {
     }
     interact()
 
-    // TODO: framerate independence, smoothing
+    // todo: framerate independence, smoothing
     if (pan.held) {
         const dx = (mouseX - pmouseX) / zoom.scale
         const dy = (mouseY - pmouseY) / zoom.scale
@@ -503,7 +511,8 @@ function update() {
     // zoom
     const pscale = zoom.scale
     zoom.scale *= zoom.vel_factor
-    zoom.scale = clamp(zoom.scale, 1, 20 * 4 / cell_size)
+    zoom.max_scale = 20 * 4 / cell_size
+    zoom.scale = clamp(zoom.scale, 1, zoom.max_scale)
     zoom.vel_factor = lerp(zoom.vel_factor, 1, 0.2)
 
     // update pan to keep mouse in place
@@ -544,7 +553,7 @@ const button_data = [
             get_updater().init()
         },
     },
-    {},
+    // {},
     {
         text: () => "÷2",
         action: () => {
@@ -562,7 +571,7 @@ const button_data = [
             get_updater().update()
         },
     },
-    {},
+    // {},
     {
         text: () => "step",
         action: () => get_updater().update(),
