@@ -499,7 +499,15 @@ let num_graphics, num_texture
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL)
     glsl = SwissGL(canvas)
-    for (const up of updaters) {
+
+    const tag_ups = {}
+    for (const up of updaters.toReversed()) {
+        // note: r8 can use same shader as rgba32f,
+        // but tag "cells" will keep the format it's first
+        // initialized to (no gba if init with r8)
+        tag_ups[up.get_target_params().tag] = up
+    }
+    for (const up of Object.values(tag_ups)) {
         up.init()
     }
 
