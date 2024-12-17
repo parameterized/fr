@@ -72,7 +72,7 @@ const huemap = new Updater({
         }, { ...this.get_target_params() })
     },
     update: function() {
-        cells = glsl({
+        glsl({
             seed: Math.random() * 12417,
             FP: `
             float sigmoid(float x) {
@@ -128,7 +128,7 @@ const huemap = new Updater({
                 pan.y / cell_size,
             ],
             scale: zoom.scale,
-            cells: cells[0],
+            cells: glsl.buffers.cells[0],
             FP: `
             void fragment() {
                 vec2 offset_uv = vec2(offset) / vec2(cells_size());
@@ -139,7 +139,7 @@ const huemap = new Updater({
     },
     interact: function(mx_square, my_square) {
         const cur_cells = glsl({
-            cells: cells[0],
+            cells: glsl.buffers.cells[0],
             FP: "cells(I)",
         }, {
             ...this.get_target_params(),
@@ -170,7 +170,7 @@ const huemap = new Updater({
                 }
             }
             FOut = cells(I);
-        `}, cells[0])
+        `}, glsl.buffers.cells[0])
     }
 })
 const r8_cycle = new Updater({
@@ -185,7 +185,7 @@ const r8_cycle = new Updater({
         }
     },
     update: function() {
-        cells = glsl({
+        glsl({
             seed: Math.random() * 12417,
             FP: "vec3(mod(Src(I).r + 0.01, 1.0)), 1"
         }, { ...this.get_target_params(), format: "r8" })
@@ -209,9 +209,9 @@ const adder = new Updater({
         }, { ...this.get_target_params() })
     },
     update: function() {
-        cells = glsl({
+        glsl({
             seed: Math.random() * 12417,
-            cells: cells[0],
+            cells: glsl.buffers.cells_int[0],
             FP: `
             uniform isampler2D cells;
             void fragment() {
@@ -242,7 +242,7 @@ const adder = new Updater({
                 pan.y / cell_size,
             ],
             scale: zoom.scale,
-            cells: cells[0],
+            cells: glsl.buffers.cells_int[0],
             num_texture,
             FP: `
             uniform isampler2D cells;
@@ -270,7 +270,7 @@ const adder = new Updater({
     },
     interact: function(mx_square, my_square) {
         const cur_cells = glsl({
-            cells: cells[0],
+            cells: glsl.buffers.cells_int[0],
             FP: `
             uniform isampler2D cells;
             void fragment() {
@@ -308,7 +308,7 @@ const adder = new Updater({
                 }
                 FOut = texture(cells, UV);
             }
-        `}, cells[0])
+        `}, glsl.buffers.cells_int[0])
     }
 })
 
@@ -344,13 +344,13 @@ const zoom = {
 let paused = false
 let cell_size = 4
 
-let glsl, cells
+let glsl
 let num_graphics, num_texture
 
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL)
     glsl = SwissGL(canvas)
-    cells = get_updater().init()
+    get_updater().init()
 
     frameRate(60)
     document.addEventListener("contextmenu", e => e.preventDefault())
@@ -428,7 +428,7 @@ function mouseWheel(e) {
     const cycle_button = buttons.find(b => (b.text && b.text() || "").startsWith("cycle"))
     if (mouse_in_rect(cycle_button)) {
         if (millis() - (last_cycle_time || 0) > 100) {
-            cycle_updater(sign(-e.deltaY))
+            cycle_updater(sign(e.deltaY))
             last_cycle_time = millis()
         }
     } else {
@@ -447,7 +447,7 @@ function keyPressed(e) {
     if (key === " ") {
         paused = !paused
     } else if (key === "r") {
-        cells = get_updater().init()
+        get_updater().init()
     } else if (key === "Tab") {
         panel_open = !panel_open
     } else if (key === "d") {
@@ -545,7 +545,7 @@ const button_data = [
     {
         text: () => "reset",
         action: () => {
-            cells = get_updater().init()
+            get_updater().init()
         },
     },
     {},
