@@ -470,16 +470,16 @@ function interact() {
         const w = width, h = height
         const mx = mod(mouseX / zoom.scale - pan.x, w)
         const my = mod(h - (h - mouseY) / zoom.scale - pan.y, h)
-        let mxSquare, mySquare
+        let mx_square, my_square
         if (aspect > 1) {
-            mxSquare = (w / 2 + (mx - w / 2) * aspect) / w
-            mySquare = 1 - my / h
+            mx_square = (w / 2 + (mx - w / 2) * aspect) / w
+            my_square = 1 - my / h
         } else {
-            mxSquare = mx / w
-            mySquare = 1 - (h / 2 + (my - h / 2) / aspect) / h
+            mx_square = mx / w
+            my_square = 1 - (h / 2 + (my - h / 2) / aspect) / h
         }
 
-        get_updater().interact(mxSquare, mySquare)
+        get_updater().interact(mx_square, my_square)
     }
 }
 
