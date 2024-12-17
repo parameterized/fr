@@ -43,8 +43,8 @@ const ease = {
 }
 
 class Updater {
-    constructor({name, get_target_params, init, update, draw}) {
-        Object.assign(this, {name, get_target_params, init, update, draw})
+    constructor({name, get_target_params, init, update, draw, interact}) {
+        Object.assign(this, {name, get_target_params, init, update, draw, interact})
     }
 }
 
@@ -133,6 +133,41 @@ const huemap = new Updater({
             }
         `})
     },
+    interact: function(mx_square, my_square) {
+        const cur_cells = glsl({
+            cells: cells[0],
+            FP: "cells(I)",
+        }, {
+            ...this.get_target_params(),
+            story: 1,
+            tag: "cur_cells",
+        })
+        glsl({
+            seed: Math.random() * 12417,
+            mouse_square: [mx_square, my_square],
+            brush_size: 0.1 / zoom.scale,
+            cells: cur_cells[0],
+            FP: `
+            vec2 size = vec2(cells_size());
+            float aspect = size.x / size.y;
+            vec2 aspect_scale = (
+                aspect > 1.0
+                ? vec2(aspect, 1.0)
+                : vec2(1.0, 1.0 / aspect)
+            );
+            vec2 uv_square = 0.5 + (UV - 0.5) * aspect_scale;
+            for (int i = -1; i <= 1; ++i) {
+                for (int j = -1; j <= 1; ++j) {
+                    vec2 uv_tile = uv_square + vec2(i, j) * aspect_scale;
+                    if (distance(uv_tile, mouse_square) < brush_size) {
+                        FOut = vec4(hash(ivec3(I, seed)), 1);
+                        return;
+                    }
+                }
+            }
+            FOut = cells(I);
+        `}, cells[0])
+    }
 })
 const r8_cycle = new Updater({
     ...huemap,
@@ -223,6 +258,48 @@ const adder = new Updater({
             }
         `})
     },
+    interact: function(mx_square, my_square) {
+        const cur_cells = glsl({
+            cells: cells[0],
+            FP: `
+            uniform isampler2D cells;
+            void fragment() {
+                FOut = texture(cells, UV);
+            }
+        `}, {
+            ...this.get_target_params(),
+            story: 1,
+            tag: "cur_cells",
+        })
+        glsl({
+            seed: Math.random() * 12417,
+            mouse_square: [mx_square, my_square],
+            brush_size: 0.1 / zoom.scale,
+            cells: cur_cells[0],
+            FP: `
+            uniform isampler2D cells;
+            void fragment() {
+                vec2 size = vec2(textureSize(cells, 0));
+                float aspect = size.x / size.y;
+                vec2 aspect_scale = (
+                    aspect > 1.0
+                    ? vec2(aspect, 1.0)
+                    : vec2(1.0, 1.0 / aspect)
+                );
+                vec2 uv_square = 0.5 + (UV - 0.5) * aspect_scale;
+                for (int i = -1; i <= 1; ++i) {
+                    for (int j = -1; j <= 1; ++j) {
+                        vec2 uv_tile = uv_square + vec2(i, j) * aspect_scale;
+                        if (distance(uv_tile, mouse_square) < brush_size) {
+                            FOut = ivec4(ivec3(hash(ivec3(I, seed)) * 255.0), 1);
+                            return;
+                        }
+                    }
+                }
+                FOut = texture(cells, UV);
+            }
+        `}, cells[0])
+    }
 })
 
 const updaters = [
@@ -381,39 +458,7 @@ function interact() {
             mySquare = 1 - (h / 2 + (my - h / 2) / aspect) / h
         }
 
-        const cur_cells = glsl({
-            cells: cells[0],
-            FP: "cells(I)",
-        }, {
-            ...get_updater().get_target_params(),
-            story: 1,
-            tag: "cur_cells",
-        })
-        glsl({
-            seed: Math.random() * 12417,
-            mouseSquare: [mxSquare, mySquare],
-            brushSize: 0.1 / zoom.scale,
-            cells: cur_cells[0],
-            FP: `
-            vec2 size = vec2(cells_size());
-            float aspect = size.x / size.y;
-            vec2 aspect_scale = (
-                aspect > 1.0
-                ? vec2(aspect, 1.0)
-                : vec2(1.0, 1.0 / aspect)
-            );
-            vec2 uv_square = 0.5 + (UV - 0.5) * aspect_scale;
-            for (int i = -1; i <= 1; ++i) {
-                for (int j = -1; j <= 1; ++j) {
-                    vec2 uv_tile = uv_square + vec2(i, j) * aspect_scale;
-                    if (distance(uv_tile, mouseSquare) < brushSize) {
-                        FOut = vec4(hash(ivec3(I, seed)), 1);
-                        return;
-                    }
-                }
-            }
-            FOut = cells(I);
-        `}, cells[0])
+        get_updater().interact(mxSquare, mySquare)
     }
 }
 
