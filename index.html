@@ -212,10 +212,14 @@ const adder = new Updater({
                 // numbers
                 vec2 num_uv = uv * vec2(cells_size);
                 num_uv = mod(num_uv, vec2(1));
-                int display_num = f.r / 100;
+                num_uv *= 4.0;
+                num_uv -= 0.5;
+                num_uv = clamp(num_uv, vec2(0, 1), vec2(3, 2));
+                int display_num = (f.r / int(pow(10.0, 2.0 - floor(num_uv.x))) % 10);
+                num_uv.x = mod(num_uv.x, 1.0);
                 num_uv.x += float(display_num);
                 num_uv /= vec2(10, 1);
-                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).r * scale / 10.0);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * min(scale / 16.0, 1.0));
             }
         `})
     },
@@ -437,7 +441,7 @@ function update() {
     // zoom
     const pscale = zoom.scale
     zoom.scale *= zoom.vel_factor
-    zoom.scale = clamp(zoom.scale, 1, 40 / cell_size)
+    zoom.scale = clamp(zoom.scale, 1, 20 * 4 / cell_size)
     zoom.vel_factor = lerp(zoom.vel_factor, 1, 0.2)
 
     // update pan to keep mouse in place
