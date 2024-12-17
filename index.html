@@ -521,6 +521,10 @@ function windowResized() {
 
 const button_data = [
     {
+        text: () => paused ? "play" : "pause",
+        action: () => paused = !paused,
+    },
+    {
         text: () => "reset",
         action: () => {
             cells = get_updater().init()
@@ -622,9 +626,6 @@ function ui_sketch(p) {
         const y_offset = (1 - ease.inOutCubic(panel_open_t)) * panel_height
         p.rect(0, p.height - panel_height + y_offset, p.width, panel_height)
         p.fill(255, 200)
-        if (paused) {
-            p.text("paused", 70, p.height - 20)
-        }
 
         for (const b of get_buttons(p)) {
             if (b.text === undefined) {
