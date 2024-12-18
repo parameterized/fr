@@ -518,7 +518,7 @@ const event_pairs = new Updater({
                 if (rng_1.x < 0.6094757) {
                     FOut.g = 4;
                 } else {
-                    // note: could bias edges for more radial diffusion
+                    // note: could bias edges for more circular diffusion
                     FOut.g = int(rng_1.y * 8.0);
                     if (FOut.g > 3) {
                         FOut.g += 1;
@@ -679,6 +679,236 @@ const event_pairs = new Updater({
         `}, glsl.buffers.cells_int2[0])
     }
 })
+const power = new Updater({
+    name: "power",
+    get_target_params: function() {
+        return {
+            scale: 1 / cell_size / window.devicePixelRatio,
+            format: "rg32i",
+            story: 2,
+            tag: "cells_int2",
+        }
+    },
+    init: function() {
+        return glsl({
+            FP: "2, 0, 0, 1",
+        }, { ...this.get_target_params() })
+    },
+    update: function() {
+        // choose cell to update
+        glsl({
+            seed: Math.random() * 12417,
+            cells: glsl.buffers.cells_int2[0],
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                FOut = texelFetch(cells, I, 0);
+
+                vec3 rng_1 = hash(ivec3(I, seed + 1.0));
+                // todo: find optimal self selection for plus neighborhood
+                if (rng_1.x < 0.6094757) {
+                    FOut.g = 4;
+                } else {
+                    FOut.g = int(rng_1.y * 4.0) * 2 + 1;
+                }
+            }
+        `}, { ...this.get_target_params() })
+        // update pairs where a cell chose self
+        // and 1 neighbor chose the cell
+        glsl({
+            seed: Math.random() * 12417,
+            cells: glsl.buffers.cells_int2[0],
+            FP: `
+            uniform isampler2D cells;
+
+            ivec2 g_to_dir(int g) {
+                return ivec2(g % 3 - 1, g / 3 - 1);
+            }
+            ivec2 wrap_pos(ivec2 pos, ivec2 cells_size) {
+                return (pos + cells_size) % cells_size;
+            }
+            ivec2 is_target(ivec2 pos) {
+                /// returns (is_target, updater_val)
+
+                if (texelFetch(cells, pos, 0).g != 4) {
+                    return ivec2(0, 0);
+                }
+                ivec2 cells_size = textureSize(cells, 0);
+                int updater_count = 0;
+                ivec2 result = ivec2(0);
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        if (dx == 0 && dy == 0) {
+                            continue;
+                        }
+                        ivec2 neighbor_offset = ivec2(dx, dy);
+                        ivec2 neighbor_pos = wrap_pos(pos + neighbor_offset, cells_size);
+                        ivec4 neighbor_val = texelFetch(cells, neighbor_pos, 0);
+                        ivec2 neighbor_choice = g_to_dir(neighbor_val.g);
+                        if (neighbor_choice == -neighbor_offset) {
+                            updater_count++;
+                            result.y = neighbor_val.r;
+                        }
+                    }
+                }
+                result.x = int(updater_count == 1);
+                return result;
+            }
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                FOut = texelFetch(cells, I, 0);
+
+                // re-init on resize
+                if (FOut.r == 0) {
+                    FOut = ivec4(2, 0, 0, 1);
+                    return;
+                }
+
+                vec3 rng_2 = hash(ivec3(I, seed + 2.0));
+                ivec2 is_target_result = is_target(I);
+                if (is_target_result.x == 1) {
+                    // target
+                    int updater_val = is_target_result.y;
+                    if (updater_val == FOut.r) {
+                        // merge here
+                        FOut.r = FOut.r * 2;
+                        if (FOut.r >= 4096) {
+                            FOut.r = rng_2.x < 0.2 ? 2 : 4;
+                        }
+                    } else if (updater_val >= FOut.r) {
+                        // updater moves here
+                        FOut.r = updater_val;
+                    }
+                } else if (FOut.g != 4) {
+                    ivec2 target_dir = g_to_dir(FOut.g);
+                    ivec2 target_pos = wrap_pos(I + target_dir, cells_size);
+                    if (is_target(target_pos).x == 1) {
+                        // updater
+                        int target_val = texelFetch(cells, target_pos, 0).r;
+                        if (FOut.r >= target_val) {
+                            // merged or moved from here
+                            FOut.r = rng_2.x < 0.8 ? 2 : 4;
+                        }
+                    }
+                }
+            }
+        `}, { ...this.get_target_params() })
+    },
+    draw: function() {
+        glsl({
+            offset: [
+                -pan.x / cell_size,
+                pan.y / cell_size,
+            ],
+            scale: zoom.scale,
+            max_scale: zoom.max_scale,
+            cells: glsl.buffers.cells_int2[0],
+            num_texture,
+            FP: `
+            uniform isampler2D cells;
+
+            ivec2 g_to_dir(int g) {
+                return ivec2(g % 3 - 1, g / 3 - 1);
+            }
+            ivec2 wrap_pos(ivec2 pos, ivec2 cells_size) {
+                return (pos + cells_size) % cells_size;
+            }
+
+            vec3[] colors = vec3[](
+                vec3(203.0, 185.0, 147.0) / 255.0,
+                vec3(238.0, 228.0, 218.0) / 255.0,
+                vec3(236.0, 224.0, 202.0) / 255.0,
+                vec3(239.0, 178.0, 124.0) / 255.0,
+                vec3(245.0, 149.0, 101.0) / 255.0,
+                vec3(245.0, 124.0, 95.0) / 255.0,
+                vec3(246.0, 96.0, 59.0) / 255.0,
+                vec3(237.0, 206.0, 113.0) / 255.0,
+                vec3(237.0, 204.0, 99.0) / 255.0,
+                vec3(236.0, 200.0, 90.0) / 255.0,
+                vec3(231.0, 194.0, 87.0) / 255.0,
+                vec3(238.0, 194.0, 46.0) / 255.0
+            );
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                vec2 offset_uv = vec2(offset) / vec2(cells_size);
+                vec2 uv = mod(UV / scale + offset_uv, vec2(1));
+
+                ivec4 self = texture(cells, uv);
+                FOut = vec4(vec3(colors[int(log2(float(self.r)))]), 1);
+                vec2 cell_uv = mod(uv * vec2(cells_size), vec2(1));
+                cell_uv = 0.5 + (cell_uv - 0.5) / 0.8767;
+                float border_visibility = smoothstep(max_scale / 8.0, max_scale, scale);
+                if (cell_uv.x < 0.0 || cell_uv.x > 1.0 || cell_uv.y < 0.0 || cell_uv.y > 1.0) {
+                    FOut = mix(FOut, vec4(colors[0], 1), border_visibility);
+                }
+
+                // numbers
+                vec2 num_uv = uv * vec2(cells_size);
+                num_uv = mod(num_uv, vec2(1));
+                num_uv *= 4.0;
+                num_uv -= 0.5;
+                num_uv = clamp(num_uv, vec2(0, 1), vec2(3, 2));
+                int display_num = (self.r / int(pow(10.0, 2.0 - floor(num_uv.x))) % 10);
+                num_uv.x = mod(num_uv.x, 1.0);
+                num_uv.x += float(display_num);
+                num_uv /= vec2(10, 1);
+                float num_visibility = smoothstep(max_scale / 8.0, max_scale, scale);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * num_visibility);
+
+                // todo: show 4 digits, more distinct colors
+            }
+        `})
+    },
+    interact: function(mx_square, my_square) {
+        const cur_cells = glsl({
+            cells: glsl.buffers.cells_int2[0],
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                FOut = texture(cells, UV);
+            }
+        `}, {
+            ...this.get_target_params(),
+            story: 1,
+            tag: "cur_cells_int2",
+        })
+        glsl({
+            seed: Math.random() * 12417,
+            mouse_square: [mx_square, my_square],
+            brush_size: 0.1 / zoom.scale,
+            cells: cur_cells[0],
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                vec2 size = vec2(textureSize(cells, 0));
+                float aspect = size.x / size.y;
+                vec2 aspect_scale = (
+                    aspect > 1.0
+                    ? vec2(aspect, 1.0)
+                    : vec2(1.0, 1.0 / aspect)
+                );
+                vec2 uv_square = 0.5 + (UV - 0.5) * aspect_scale;
+                for (int i = -1; i <= 1; ++i) {
+                    for (int j = -1; j <= 1; ++j) {
+                        vec2 uv_tile = uv_square + vec2(i, j) * aspect_scale;
+                        if (distance(uv_tile, mouse_square) < brush_size) {
+                            int val = hash(ivec3(I, seed)).r < 0.8 ? 2 : 4;
+                            FOut = ivec4(val, 0, 0, 1);
+                            return;
+                        }
+                    }
+                }
+                FOut = texture(cells, UV);
+            }
+        `}, glsl.buffers.cells_int2[0])
+    }
+})
 
 const updaters = [
     huemap,
@@ -686,6 +916,7 @@ const updaters = [
     add_max,
     uhh,
     uhh2,
+    power,
     event_pairs,
 ]
 let updater_index = 0
