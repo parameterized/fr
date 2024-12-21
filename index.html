@@ -909,6 +909,144 @@ const power = new Updater({
         `}, glsl.buffers.cells_int2[0])
     }
 })
+const learn_add = new Updater({
+    name: "learn add",
+    // todo: make this uint (add support)
+    get_target_params: function() {
+        return {
+            scale: 1 / cell_size / window.devicePixelRatio,
+            format: "r32i",
+            story: 2,
+            tag: "cells_int",
+        }
+    },
+    init: function() {
+        // cell spec:
+        // 4b: value, 1b: accepting updates, 3b: update dir
+        // note: has 24 unused bits for now
+        return glsl({
+            seed: Math.random() * 12417,
+            FP: "hash(ivec3(I, seed)) * 255.0, 1",
+        }, { ...this.get_target_params() })
+    },
+    update: function() {
+        // choose cell to update
+        glsl({
+            seed: Math.random() * 12417,
+            cells: glsl.buffers.cells_int[0],
+            FP: `
+            uniform isampler2D cells;
+
+            ivec2 update_dir(int x) {
+                if ((x & 8) == 1) {
+                    return ivec2(0, 0);
+                }
+                x &= 7;
+                if (x >= 4) { x++; }
+                return ivec2(x % 3 - 1, x / 3 - 1);
+            }
+            ivec2 wrap_pos(ivec2 pos, ivec2 cells_size) {
+                return (pos + cells_size) % cells_size;
+            }
+            ivec2 is_target(ivec2 pos) {
+                /// returns (is_target, updater_val (if is target))
+
+                if ((texelFetch(cells, pos, 0).r & 8) == 0) {
+                    return ivec2(0, 0);
+                }
+                ivec2 cells_size = textureSize(cells, 0);
+                int updater_count = 0;
+                ivec2 result = ivec2(0);
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        if (dx == 0 && dy == 0) {
+                            continue;
+                        }
+                        ivec2 neighbor_offset = ivec2(dx, dy);
+                        ivec2 neighbor_pos = wrap_pos(pos + neighbor_offset, cells_size);
+                        ivec4 neighbor_val = texelFetch(cells, neighbor_pos, 0);
+                        ivec2 neighbor_choice = update_dir(neighbor_val.r);
+                        if (neighbor_choice == -neighbor_offset) {
+                            updater_count++;
+                            result.y = neighbor_val.r;
+                        }
+                    }
+                }
+                result.x = int(updater_count == 1);
+                return result;
+            }
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                FOut = texelFetch(cells, I, 0);
+
+                ivec2 is_target_result = is_target(I);
+                if (is_target_result.x == 1) {
+                    // target, swap values
+                    FOut.r = is_target_result.y;
+                } else if ((FOut.r & 8) == 0) {
+                    ivec2 target_dir = update_dir(FOut.r);
+                    ivec2 target_pos = wrap_pos(I + target_dir, cells_size);
+                    if (is_target(target_pos).x == 1) {
+                        // updater, swap values
+                        int target_val = texelFetch(cells, target_pos, 0).r;
+                        FOut.r = target_val;
+                    }
+                }
+
+                // choose new windows
+                vec3 rng_1 = hash(ivec3(I, seed + 1.0));
+                FOut.r |= 15;
+                FOut.r -= 15;
+                if (rng_1.x < 0.6094757) {
+                    FOut.r += 1 << 3;
+                } else {
+                    FOut.r += int(rng_1.y * 8.0);
+                }
+            }
+        `}, { ...this.get_target_params() })
+    },
+    draw: function() {
+        glsl({
+            offset: [
+                -pan.x / cell_size,
+                pan.y / cell_size,
+            ],
+            scale: zoom.scale,
+            max_scale: zoom.max_scale,
+            cells: glsl.buffers.cells_int[0],
+            num_texture,
+            FP: `
+            uniform isampler2D cells;
+
+            void fragment() {
+                ivec2 cells_size = textureSize(cells, 0);
+                vec2 offset_uv = vec2(offset) / vec2(cells_size);
+                vec2 uv = mod(UV / scale + offset_uv, vec2(1));
+
+                ivec4 f = texture(cells, uv);
+                FOut = vec4(vec3(0), 1);
+                int val = f.r >> 4;
+                FOut.r = float(val) / 16.0;
+
+                // numbers
+                vec2 num_uv = uv * vec2(cells_size);
+                num_uv = mod(num_uv, vec2(1));
+                num_uv *= 4.0;
+                num_uv -= 0.5;
+                num_uv = clamp(num_uv, vec2(0, 1), vec2(3, 2));
+                int display_num = (val / int(pow(10.0, 2.0 - floor(num_uv.x))) % 10);
+                num_uv.x = mod(num_uv.x, 1.0);
+                num_uv.x += float(display_num);
+                num_uv /= vec2(10, 1);
+                float num_visibility = smoothstep(max_scale / 8.0, max_scale, scale);
+                FOut.rgb = mix(FOut.rgb, vec3(1), num_texture(num_uv).a * num_visibility);
+            }
+        `})
+    },
+    interact: function(mx_square, my_square) {
+    },
+})
 
 const updaters = [
     huemap,
@@ -918,6 +1056,7 @@ const updaters = [
     uhh2,
     power,
     event_pairs,
+    learn_add,
 ]
 let updater_index = 0
 
