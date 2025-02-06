@@ -707,8 +707,31 @@ const power = new Updater({
                 FOut = texelFetch(cells, I, 0);
 
                 vec3 rng_1 = hash(ivec3(I, seed + 1.0));
-                // todo: find optimal self selection for plus neighborhood
-                if (rng_1.x < 0.6094757) {
+
+                // find optimal self selection for plus neighborhood
+                // P(selected) = (
+                //     P(chose self) * P(only 1 of 4 neighbors chose this)
+                //     + P(chose other) * P(other chose self) * P(3 neighbors didn't choose that)
+                // )
+                // P(chose self) = x
+                // P(chose other) = 1 - x
+                // P(neighbor chose this) = (1 - x) / 4
+                // P(neighbor didn't choose that) = 1 - (1 - x) / 4
+                // P(only 1 of 4 neighbors chose this) = C(4,1) * ((1 - x) / 4)^1 * (1 - (1 - x) / 4)^3
+                // = 4 * (1 - x) / 4 * (1 - (1 - x) / 4)^3
+                // = (1 - x) * (1 - (1 - x) / 4)^3
+                // P(3 neighbors didn't choose that) = (1 - (1 - x) / 4)^3
+                // P(selected) = (
+                //     x * (1 - x) * (1 - (1 - x) / 4)^3
+                //     + (1 - x) * x * (1 - (1 - x) / 4)^3
+                // )
+                // = (1 - (1 - x) / 4)^3 * (x * (1 - x) + (1 - x) * x)
+                // = (1 - (1/4 - x/4))^3 * 2x * (1 - x)
+                // = (3/4 + x/4)^3 * 2x * (1 - x)
+                // -> max is 2187 / 6250 = 0.34992
+                //    at 2 * sqrt(2) / 3 - 1 / 3 = 0.6
+
+                if (rng_1.x < 0.6) {
                     FOut.g = 4;
                 } else {
                     FOut.g = int(rng_1.y * 4.0) * 2 + 1;
