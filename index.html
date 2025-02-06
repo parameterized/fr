@@ -1304,6 +1304,16 @@ function update() {
     panel_open_t = clamp(panel_open_t, 0, 1)
 }
 
+setInterval(() => {
+    // print cell count and action event rate for power
+    if (!paused && get_updater().name === "power") {
+        const size = glsl.buffers.cells_int2[0].size
+        const n = size[0] * size[1]
+        const aer = (frameRate() * 0.34992).toFixed(3)
+        console.log(`${n.toLocaleString()} cells, AER: ${aer}`)
+    }
+}, 1000);
+
 function draw() {
     update()
     get_updater().draw()
