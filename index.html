@@ -1087,11 +1087,14 @@ function get_updater() {
     return updaters[updater_index]
 }
 
-let last_cycle_time;
+let last_cycle_time = 0
 function cycle_updater(dir = 1) {
     updater_index = mod(updater_index + dir, updaters.length)
     last_cycle_time = millis()
 }
+
+let last_step_rate_time = 0
+let step_rate_count = 0
 
 
 let mouse_buttons_down = { 0: false, 1: false, 2: false }
@@ -1202,7 +1205,7 @@ function mouseWheel(e) {
     const buttons = get_buttons()
     const cycle_button = buttons.find(b => (b.text && b.text() || "").startsWith("cycle"))
     if (mouse_in_rect(cycle_button)) {
-        if (millis() - (last_cycle_time || 0) > 100) {
+        if (millis() - last_cycle_time > 100) {
             cycle_updater(sign(e.deltaY))
             last_cycle_time = millis()
         }
@@ -1236,6 +1239,7 @@ document.addEventListener("keydown", e => {
     // includes held repeat
     if (e.key === "ArrowRight") {
         get_updater().update()
+        step_rate_count++
     }
 })
 
@@ -1260,7 +1264,17 @@ function interact() {
 
 function update() {
     if (!paused) {
-        get_updater().update()
+        const start = millis()
+        // hold "u" for multistep, can get flickery
+        if (keyIsDown(85)) {
+            while (millis() - start < 1000 / 30) {
+                get_updater().update()
+                step_rate_count++
+            }
+        } else {
+            get_updater().update()
+            step_rate_count++
+        }
     }
     interact()
 
@@ -1305,11 +1319,18 @@ function update() {
 }
 
 setInterval(() => {
+    const now = millis()
+    const sec = (now - last_step_rate_time) / 1000
+    const steps_per_sec = step_rate_count / sec
+    last_step_rate_time = now
+    step_rate_count = 0
+
     // print cell count and action event rate for power
-    if (!paused && get_updater().name === "power") {
+    if (get_updater().name === "power") {
         const size = glsl.buffers.cells_int2[0].size
         const n = size[0] * size[1]
-        const aer = (frameRate() * 0.34992).toFixed(3)
+        const events_per_step = 0.34992
+        const aer = (events_per_step * steps_per_sec).toFixed(3)
         console.log(`${n.toLocaleString()} cells, AER: ${aer}`)
     }
 }, 1000);
