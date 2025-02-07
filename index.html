@@ -792,18 +792,16 @@ const power = new Updater({
 
                 vec3 rng_2 = hash(ivec3(I, seed + 2.0));
                 ivec2 is_target_result = is_target(I);
+                int max_val = 512;
                 if (is_target_result.x == 1) {
                     // target
                     int updater_val = is_target_result.y;
-                    if (updater_val == FOut.r) {
-                        // merge here
-                        FOut.r = FOut.r * 2;
-                        if (FOut.r >= 4096) {
-                            FOut.r = rng_2.x < 0.2 ? 2 : 4;
-                        }
-                    } else if (updater_val >= FOut.r) {
+                    if (updater_val > FOut.r) {
                         // updater moves here
                         FOut.r = updater_val;
+                    } else if (updater_val == FOut.r && FOut.r < max_val) {
+                        // merge here, cap at max_val
+                        FOut.r = FOut.r * 2;
                     }
                 } else if (FOut.g != 4) {
                     ivec2 target_dir = g_to_dir(FOut.g);
@@ -811,8 +809,11 @@ const power = new Updater({
                     if (is_target(target_pos).x == 1) {
                         // updater
                         int target_val = texelFetch(cells, target_pos, 0).r;
-                        if (FOut.r >= target_val) {
-                            // merged or moved from here
+                        if (FOut.r > target_val) {
+                            // moved, swap target here
+                            FOut.r = target_val;
+                        } else if (FOut.r == target_val && target_val < max_val) {
+                            // merged, init here
                             FOut.r = rng_2.x < 0.8 ? 2 : 4;
                         }
                     }
